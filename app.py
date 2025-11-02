@@ -328,7 +328,7 @@ elif section == "🤖 Propensity":
             st.markdown("#### Estimated KPIs (based on propensity ≥ threshold)")
             c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("Conversion Rate", fmt_pct(overall["conversion_rate"]))
-            c2.metric("Acquired", overall["acquired"]))
+            c2.metric("Acquired", overall["acquired"])
             c3.metric("CPA", fmt_money(overall["cpa"]))
             c4.metric("CLV Realized", fmt_money(overall["clv_realized"]))
             c5.metric("ROI", fmt_pct(overall["roi"]))
