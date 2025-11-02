@@ -151,6 +151,24 @@ def lift_table(y_true: pd.Series, y_pred: pd.Series, bins: int = 10) -> pd.DataF
 def fmt_pct(x): return "-" if pd.isna(x) else f"{100*x:.2f}%"
 def fmt_money(x): return "-" if pd.isna(x) else f"${x:,.0f}"
 
+# --- scikit-learn unpickle compatibility shim (module-level) ---
+# Ensures older pickles that reference sklearn.compose._column_transformer._RemainderColsList can be loaded.
+class _SkRemainderColsList(list):
+    pass
+
+# Make the shim pretend it lives inside sklearn.compose._column_transformer
+_SkRemainderColsList.__module__ = "sklearn.compose._column_transformer"
+
+def apply_sklearn_unpickle_shims():
+    try:
+        import sklearn.compose._column_transformer as ct_mod  # type: ignore
+        if not hasattr(ct_mod, "_RemainderColsList"):
+            ct_mod._RemainderColsList = _SkRemainderColsList
+    except Exception:
+        pass
+
+apply_sklearn_unpickle_shims()
+
 # ----------------------------------
 # NEW: Model loader (Joblib → Cloudpickle fallback) + pre-imports
 # ----------------------------------
