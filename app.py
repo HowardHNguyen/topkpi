@@ -20,6 +20,24 @@ TARGET_COL = "conversion"
 CLV_COL = "Customer Lifetime Value"  # optional for KPI math
 
 # ----------------------------------
+# ✅ scikit-learn unpickle compatibility shim
+# Fixes: Can't get attribute '_RemainderColsList' on sklearn.compose._column_transformer
+# ----------------------------------
+def apply_sklearn_unpickle_shims():
+    try:
+        import sklearn.compose._column_transformer as ct_mod  # type: ignore
+        if not hasattr(ct_mod, "_RemainderColsList"):
+            class _RemainderColsList(list):
+                """Lightweight shim to satisfy unpickling of ColumnTransformer remainder."""
+                pass
+            ct_mod._RemainderColsList = _RemainderColsList  # inject shim
+    except Exception:
+        # If import fails we just skip; cloudpickle fallback may still succeed
+        pass
+
+apply_sklearn_unpickle_shims()
+
+# ----------------------------------
 # Helpers
 # ----------------------------------
 def _expected_columns_from_pipeline(pipe):
@@ -28,7 +46,7 @@ def _expected_columns_from_pipeline(pipe):
         pre = pipe.named_steps.get("pre") or pipe.named_steps.get("pre3")
         cols = []
         for _, _, cols_sel in pre.transformers_:
-            if cols_sel == "drop": 
+            if cols_sel == "drop":
                 continue
             if isinstance(cols_sel, list):
                 cols.extend(cols_sel)
@@ -134,7 +152,7 @@ def fmt_pct(x): return "-" if pd.isna(x) else f"{100*x:.2f}%"
 def fmt_money(x): return "-" if pd.isna(x) else f"${x:,.0f}"
 
 # ----------------------------------
-# NEW: Model loader (Joblib → Cloudpickle fallback)
+# NEW: Model loader (Joblib → Cloudpickle fallback) + pre-imports
 # ----------------------------------
 @st.cache_data(show_spinner=False)
 def load_model_any(path_candidates):
@@ -142,15 +160,19 @@ def load_model_any(path_candidates):
     Try to load a fitted pipeline from any of the provided filenames.
     1) joblib.load
     2) cloudpickle.load (fallback)
-    Pre-import sklearn/xgboost/lightgbm so pickle can resolve referenced classes.
+    Pre-import sklearn/xgboost/lightgbm so pickle can resolve referenced classes,
+    and apply a shim for private sklearn classes that changed across versions.
     """
-    # Pre-imports so pickle can resolve class paths
+    # Pre-imports for pickle resolution
     try:
         import sklearn  # noqa
         import xgboost  # noqa
         import lightgbm # noqa
     except Exception:
         pass
+
+    # Re-apply shim (in case streamlit cache restored a fresh process)
+    apply_sklearn_unpickle_shims()
 
     last_err = None
     for p in path_candidates:
@@ -244,23 +266,24 @@ if section == "📊 KPIs":
         else:
             st.info("No ground-truth conversion column found. Switch to **Propensity** to score first; you’ll see **Estimated KPIs** there.")
 
-        if has_target and "by_channel" in kpis:
-            by_ch = kpis["by_channel"]
-            st.markdown("#### By Sales Channel")
-            st.dataframe(by_ch, use_container_width=True)
-            fig = px.bar(by_ch, x="Sales Channel", y="conversion_rate",
-                         title="Conversion Rate by Channel",
-                         text=by_ch["conversion_rate"].map(lambda v: f"{100*v:.1f}%"))
-            st.plotly_chart(fig, use_container_width=True)
+        if has_target:
+            by_ch = kpis.get("by_channel")
+            if isinstance(by_ch, pd.DataFrame) and len(by_ch):
+                st.markdown("#### By Sales Channel")
+                st.dataframe(by_ch, use_container_width=True)
+                fig = px.bar(by_ch, x="Sales Channel", y="conversion_rate",
+                             title="Conversion Rate by Channel",
+                             text=by_ch["conversion_rate"].map(lambda v: f"{100*v:.1f}%"))
+                st.plotly_chart(fig, use_container_width=True)
 
-        if has_target and "by_offer" in kpis:
-            by_offer = kpis["by_offer"]
-            st.markdown("#### By Offer Type")
-            st.dataframe(by_offer, use_container_width=True)
-            fig2 = px.bar(by_offer, x="Renew Offer Type", y="roi",
-                          title="ROI by Offer Type",
-                          text=by_offer["roi"].map(lambda v: f"{100*v:.1f}%"))
-            st.plotly_chart(fig2, use_container_width=True)
+            by_offer = kpis.get("by_offer")
+            if isinstance(by_offer, pd.DataFrame) and len(by_offer):
+                st.markdown("#### By Offer Type")
+                st.dataframe(by_offer, use_container_width=True)
+                fig2 = px.bar(by_offer, x="Renew Offer Type", y="roi",
+                              title="ROI by Offer Type",
+                              text=by_offer["roi"].map(lambda v: f"{100*v:.1f}%"))
+                st.plotly_chart(fig2, use_container_width=True)
 
 # ----------------------------------
 # Propensity
@@ -297,7 +320,6 @@ elif section == "🤖 Propensity":
             est_converted = int((df_scored["propensity"] >= thr).sum())
             st.metric("Estimated Converts @ threshold", est_converted)
 
-        # Estimated KPI block (if no actual conversion provided)
         if TARGET_COL not in df_scored.columns:
             dtmp = df_scored.copy()
             dtmp[TARGET_COL] = (dtmp["propensity"] >= thr).astype(int)
@@ -306,7 +328,7 @@ elif section == "🤖 Propensity":
             st.markdown("#### Estimated KPIs (based on propensity ≥ threshold)")
             c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("Conversion Rate", fmt_pct(overall["conversion_rate"]))
-            c2.metric("Acquired", overall["acquired"])
+            c2.metric("Acquired", overall["acquired"]))
             c3.metric("CPA", fmt_money(overall["cpa"]))
             c4.metric("CLV Realized", fmt_money(overall["clv_realized"]))
             c5.metric("ROI", fmt_pct(overall["roi"]))
