@@ -181,7 +181,7 @@ def fmt_money(x): return "-" if pd.isna(x) else f"${x:,.0f}"
 # ───────────────────────────────────────────────────────────────────────────────
 # Model loader (no shims) — only load the clean artifact
 # ───────────────────────────────────────────────────────────────────────────────
-MODEL_CANDIDATES = ["best_model_v2.pkl"]  # ensure this file is in the repo root
+MODEL_CANDIDATES = ["best_model.pkl"]  # ensure this file is in the repo root
 
 @st.cache_data(show_spinner=False)
 def load_model(path: str):
