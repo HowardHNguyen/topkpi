@@ -19,6 +19,22 @@ try:
 except Exception:
     px, go, PLOTLY_OK = None, None, False
 
+# safe loader: try joblib, fall back to pickle
+try:
+    import joblib
+    HAVE_JOBLIB = True
+except Exception:
+    joblib = None
+    HAVE_JOBLIB = False
+import pickle
+
+def load_any_pickle(path: str):
+    if HAVE_JOBLIB:
+        return joblib.load(path)
+    # fallback to standard pickle
+    with open(path, "rb") as f:
+        return pickle.load(f)
+    
 # ───────────────────────────────────────────────────────────────────────────────
 # App config
 # ───────────────────────────────────────────────────────────────────────────────
@@ -169,7 +185,7 @@ MODEL_CANDIDATES = ["best_model_v2.pkl"]  # ensure this file is in the repo root
 
 @st.cache_data(show_spinner=False)
 def load_model(path: str):
-    return joblib.load(path)
+    return load_any_pickle(path)
 
 pipe = None
 model_info = ""
