@@ -2,18 +2,51 @@
 # Advanced Marketing KPI Performance with Data Science
 # Single-file Streamlit app (root-level). Loads best_model_v2.pkl (joblib).
 
-import os, time, json
+# app.py (header)
+import os, time, json, sys, importlib.util
 import numpy as np
 import pandas as pd
 import streamlit as st
-import plotly.express as px
-import plotly.graph_objects as go
 import joblib
+
+# TRY plotly imports safely (don’t crash if missing)
+try:
+    import plotly.express as px
+    import plotly.graph_objects as go
+    PLOTLY_OK = True
+except Exception as _plotly_err:
+    px = None
+    go = None
+    PLOTLY_OK = False
+
+st.set_page_config(page_title="MaxAIS • KPI + Propensity", page_icon="📈", layout="wide")
+
+# Sidebar diagnostics so we can see what’s installed on Cloud
+with st.sidebar.expander("Environment diagnostics", expanded=False):
+    st.write("Python:", sys.version)
+    st.write("Plotly available:", importlib.util.find_spec("plotly") is not None)
+    # Show versions if present
+    def _ver(modname):
+        try:
+            m = __import__(modname)
+            return getattr(m, "__version__", "unknown")
+        except Exception:
+            return "missing"
+    st.write({
+        "plotly": _ver("plotly"),
+        "streamlit": _ver("streamlit"),
+        "numpy": _ver("numpy"),
+        "pandas": _ver("pandas"),
+        "scikit_learn": _ver("sklearn"),
+        "lightgbm": _ver("lightgbm"),
+        "xgboost": _ver("xgboost"),
+        "joblib": _ver("joblib"),
+    })
 
 # ───────────────────────────────────────────────────────────────────────────────
 # App config
 # ───────────────────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="MaxAIS • KPI + Propensity", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Advanced Marketing KPI + Propensity", page_icon="📈", layout="wide")
 
 DEFAULT_COST_MAP = {'Web': 40, 'Call Center': 70, 'Branch': 90, 'Agent': 120}
 TARGET_COL = "conversion"
@@ -154,7 +187,7 @@ for p in MODEL_CANDIDATES:
 # ───────────────────────────────────────────────────────────────────────────────
 # Sidebar
 # ───────────────────────────────────────────────────────────────────────────────
-st.sidebar.title("MaxAIS • KPI + Propensity")
+st.sidebar.title("KPI + Propensity")
 st.sidebar.caption("Advanced Marketing KPI Performance — Conversion • CLV • CPA • ROI • Propensity")
 
 with st.sidebar.expander("Cost per Acquisition (override)", expanded=False):
