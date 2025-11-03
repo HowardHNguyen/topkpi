@@ -234,7 +234,7 @@ section = st.sidebar.radio("Navigate",
 # ----------------------------------
 # Load model (tries best_model.pkl then best_model_cloud.pkl)
 # ----------------------------------
-MODEL_CANDIDATES = ["best_model.pkl", "best_model_cloud.pkl"]
+MODEL_CANDIDATES = ["best_model.pkl"]
 pipe = None
 try:
     pipe = load_model_any(MODEL_CANDIDATES)
