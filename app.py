@@ -1,8 +1,8 @@
 # app.py
 # Advanced Marketing KPI Performance with Data Science
-# Single-file Streamlit app (root-level). Works with best_model.pkl OR best_model_cloud.pkl.
+# Single-file Streamlit app (root-level). Loads best_model_v2.pkl (joblib).
 
-import os, json, time
+import os, time, json
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -10,36 +10,18 @@ import plotly.express as px
 import plotly.graph_objects as go
 import joblib
 
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 # App config
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="MaxAIS • KPI + Propensity", page_icon="📈", layout="wide")
 
 DEFAULT_COST_MAP = {'Web': 40, 'Call Center': 70, 'Branch': 90, 'Agent': 120}
 TARGET_COL = "conversion"
-CLV_COL = "Customer Lifetime Value"  # optional for KPI math
+CLV_COL = "Customer Lifetime Value"  # optional; we proxy if missing
 
-# ----------------------------------
-# ✅ scikit-learn unpickle compatibility shim
-# Fixes: Can't get attribute '_RemainderColsList' on sklearn.compose._column_transformer
-# ----------------------------------
-def apply_sklearn_unpickle_shims():
-    try:
-        import sklearn.compose._column_transformer as ct_mod  # type: ignore
-        if not hasattr(ct_mod, "_RemainderColsList"):
-            class _RemainderColsList(list):
-                """Lightweight shim to satisfy unpickling of ColumnTransformer remainder."""
-                pass
-            ct_mod._RemainderColsList = _RemainderColsList  # inject shim
-    except Exception:
-        # If import fails we just skip; cloudpickle fallback may still succeed
-        pass
-
-apply_sklearn_unpickle_shims()
-
-# ----------------------------------
-# Helpers
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
+# Utilities
+# ───────────────────────────────────────────────────────────────────────────────
 def _expected_columns_from_pipeline(pipe):
     """Try to recover original feature names the ColumnTransformer expects."""
     try:
@@ -52,13 +34,10 @@ def _expected_columns_from_pipeline(pipe):
                 cols.extend(cols_sel)
             elif isinstance(cols_sel, (tuple, np.ndarray, pd.Index)):
                 cols.extend(list(cols_sel))
+        # keep order & uniqueness
         return list(dict.fromkeys(cols))
     except Exception:
         return None
-
-@st.cache_data(show_spinner=False)
-def load_csv(path: str) -> pd.DataFrame:
-    return pd.read_csv(path)
 
 def ensure_columns_for_pipeline(df: pd.DataFrame, expected: list) -> pd.DataFrame:
     """Ensure df has the exact columns the pipeline expects (missing -> NaN; keep order)."""
@@ -151,76 +130,34 @@ def lift_table(y_true: pd.Series, y_pred: pd.Series, bins: int = 10) -> pd.DataF
 def fmt_pct(x): return "-" if pd.isna(x) else f"{100*x:.2f}%"
 def fmt_money(x): return "-" if pd.isna(x) else f"${x:,.0f}"
 
-# --- scikit-learn unpickle compatibility shim (module-level) ---
-# Ensures older pickles that reference sklearn.compose._column_transformer._RemainderColsList can be loaded.
-class _SkRemainderColsList(list):
-    pass
+# ───────────────────────────────────────────────────────────────────────────────
+# Model loader (no shims)
+# ───────────────────────────────────────────────────────────────────────────────
+MODEL_CANDIDATES = ["best_model_v2.pkl"]  # only the new clean model
 
-# Make the shim pretend it lives inside sklearn.compose._column_transformer
-_SkRemainderColsList.__module__ = "sklearn.compose._column_transformer"
-
-def apply_sklearn_unpickle_shims():
-    try:
-        import sklearn.compose._column_transformer as ct_mod  # type: ignore
-        if not hasattr(ct_mod, "_RemainderColsList"):
-            ct_mod._RemainderColsList = _SkRemainderColsList
-    except Exception:
-        pass
-
-apply_sklearn_unpickle_shims()
-
-# ----------------------------------
-# NEW: Model loader (Joblib → Cloudpickle fallback) + pre-imports
-# ----------------------------------
 @st.cache_data(show_spinner=False)
-def load_model_any(path_candidates):
-    """
-    Try to load a fitted pipeline from any of the provided filenames.
-    1) joblib.load
-    2) cloudpickle.load (fallback)
-    Pre-import sklearn/xgboost/lightgbm so pickle can resolve referenced classes,
-    and apply a shim for private sklearn classes that changed across versions.
-    """
-    # Pre-imports for pickle resolution
-    try:
-        import sklearn  # noqa
-        import xgboost  # noqa
-        import lightgbm # noqa
-    except Exception:
-        pass
+def load_model(path):
+    return joblib.load(path)
 
-    # Re-apply shim (in case streamlit cache restored a fresh process)
-    apply_sklearn_unpickle_shims()
-
-    last_err = None
-    for p in path_candidates:
-        if not os.path.exists(p):
-            continue
-        # 1) joblib
+pipe = None
+model_info = ""
+for p in MODEL_CANDIDATES:
+    if os.path.exists(p):
         try:
-            return joblib.load(p)
+            pipe = load_model(p)
+            ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(p)))
+            model_info = f"Loaded: {p} (modified {ts})"
+            break
         except Exception as e:
-            last_err = e
-            # 2) cloudpickle fallback
-            try:
-                import cloudpickle
-                with open(p, "rb") as f:
-                    return cloudpickle.load(f)
-            except Exception as e2:
-                last_err = e2
-                continue
-    if last_err:
-        raise RuntimeError(f"Failed to load model from {path_candidates}: {last_err}")
-    raise FileNotFoundError(f"No model file found in {path_candidates}")
+            st.sidebar.error(f"Failed loading {p}: {e}")
 
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 # Sidebar
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 st.sidebar.title("MaxAIS • KPI + Propensity")
 st.sidebar.caption("Advanced Marketing KPI Performance — Conversion • CLV • CPA • ROI • Propensity")
 
 with st.sidebar.expander("Cost per Acquisition (override)", expanded=False):
-    # All-int args to avoid Streamlit mixed-type error
     web = st.number_input("Web", value=int(DEFAULT_COST_MAP["Web"]), min_value=0, step=5)
     cc  = st.number_input("Call Center", value=int(DEFAULT_COST_MAP["Call Center"]), min_value=0, step=5)
     br  = st.number_input("Branch", value=int(DEFAULT_COST_MAP["Branch"]), min_value=0, step=5)
@@ -231,19 +168,14 @@ section = st.sidebar.radio("Navigate",
                            ["📥 Data", "📊 KPIs", "🤖 Propensity", "📈 Lift & Gain", "🧪 Calibration"],
                            index=1)
 
-# ----------------------------------
-# Load model (tries best_model.pkl then best_model_cloud.pkl)
-# ----------------------------------
-MODEL_CANDIDATES = ["best_model.pkl"]
-pipe = None
-try:
-    pipe = load_model_any(MODEL_CANDIDATES)
-except Exception as e:
-    st.sidebar.error(f"Model load failed: {e}")
+if pipe is not None:
+    st.sidebar.success(model_info)
+else:
+    st.sidebar.warning("Model not loaded. Put best_model_v2.pkl in repo root.")
 
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 # Data input
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 st.title("Advanced Marketing KPI Performance with Data Science")
 st.write("**Conversion • CLV • CPA • ROI • Propensity** — ready for executive review and action.")
 
@@ -253,7 +185,7 @@ df = None
 if uploaded is not None:
     df = pd.read_csv(uploaded)
 elif os.path.exists("sample_data.csv"):
-    df = load_csv("sample_data.csv")
+    df = pd.read_csv("sample_data.csv")
     st.info("Loaded sample_data.csv from repo root. Upload your CSV to replace it.")
 else:
     st.warning("Upload a CSV to begin (or include sample_data.csv in the repo root).")
@@ -264,9 +196,9 @@ if df is not None:
 
 has_target = df is not None and (TARGET_COL in df.columns)
 
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 # KPIs
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 if section == "📊 KPIs":
     st.subheader("KPI Overview")
     if df is None:
@@ -285,8 +217,8 @@ if section == "📊 KPIs":
             st.info("No ground-truth conversion column found. Switch to **Propensity** to score first; you’ll see **Estimated KPIs** there.")
 
         if has_target:
-            by_ch = kpis.get("by_channel")
-            if isinstance(by_ch, pd.DataFrame) and len(by_ch):
+            if "by_channel" in kpis and isinstance(kpis["by_channel"], pd.DataFrame) and len(kpis["by_channel"]):
+                by_ch = kpis["by_channel"]
                 st.markdown("#### By Sales Channel")
                 st.dataframe(by_ch, use_container_width=True)
                 fig = px.bar(by_ch, x="Sales Channel", y="conversion_rate",
@@ -294,8 +226,8 @@ if section == "📊 KPIs":
                              text=by_ch["conversion_rate"].map(lambda v: f"{100*v:.1f}%"))
                 st.plotly_chart(fig, use_container_width=True)
 
-            by_offer = kpis.get("by_offer")
-            if isinstance(by_offer, pd.DataFrame) and len(by_offer):
+            if "by_offer" in kpis and isinstance(kpis["by_offer"], pd.DataFrame) and len(kpis["by_offer"]):
+                by_offer = kpis["by_offer"]
                 st.markdown("#### By Offer Type")
                 st.dataframe(by_offer, use_container_width=True)
                 fig2 = px.bar(by_offer, x="Renew Offer Type", y="roi",
@@ -303,15 +235,15 @@ if section == "📊 KPIs":
                               text=by_offer["roi"].map(lambda v: f"{100*v:.1f}%"))
                 st.plotly_chart(fig2, use_container_width=True)
 
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 # Propensity
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 elif section == "🤖 Propensity":
     st.subheader("Propensity Scoring")
     if df is None:
         st.warning("Upload data to score.")
     elif pipe is None:
-        st.warning("Model not loaded. Put best_model.pkl or best_model_cloud.pkl in repo root.")
+        st.warning("Model not loaded. Put best_model_v2.pkl in repo root.")
     else:
         expected_cols = _expected_columns_from_pipeline(pipe)
         df_for_model = ensure_columns_for_pipeline(df, expected_cols)
@@ -338,6 +270,7 @@ elif section == "🤖 Propensity":
             est_converted = int((df_scored["propensity"] >= thr).sum())
             st.metric("Estimated Converts @ threshold", est_converted)
 
+        # Estimated KPIs when no ground-truth conversion present
         if TARGET_COL not in df_scored.columns:
             dtmp = df_scored.copy()
             dtmp[TARGET_COL] = (dtmp["propensity"] >= thr).astype(int)
@@ -354,9 +287,9 @@ elif section == "🤖 Propensity":
         csv_bytes = df_scored.to_csv(index=False).encode("utf-8")
         st.download_button("Download scored CSV", data=csv_bytes, file_name="scored_output.csv", mime="text/csv")
 
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 # Lift & Gain
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 elif section == "📈 Lift & Gain":
     st.subheader("Lift & Cumulative Gain")
     if df is None:
@@ -383,9 +316,9 @@ elif section == "📈 Lift & Gain":
         fig_cum.update_layout(xaxis_title="Decile (cumulative)", yaxis_title="Cumulative Lift")
         st.plotly_chart(fig_cum, use_container_width=True)
 
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 # Calibration
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 elif section == "🧪 Calibration":
     st.subheader("Calibration Check (Binning)")
     if df is None:
@@ -405,7 +338,7 @@ elif section == "🧪 Calibration":
         df_tmp["bucket"] = pd.qcut(df_tmp["propensity"], q=bins, duplicates="drop")
         cal = df_tmp.groupby("bucket").agg(
             avg_p=("propensity", "mean"),
-            obs=("conversion", "mean")
+            obs=(TARGET_COL, "mean")
         ).sort_values("avg_p")
 
         fig = go.Figure()
@@ -415,8 +348,8 @@ elif section == "🧪 Calibration":
                           xaxis_title="Predicted probability", yaxis_title="Observed frequency")
         st.plotly_chart(fig, use_container_width=True)
 
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 # Footer
-# ----------------------------------
+# ───────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.caption("© Howard Nguyen, PhD • KPI dashboard and calibrated propensity model. If CLV is missing, a proxy is used for ROI.")
