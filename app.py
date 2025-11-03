@@ -1,34 +1,43 @@
 # app.py
 # Advanced Marketing KPI Performance with Data Science
-# Single-file Streamlit app (root-level). Loads best_model_v2.pkl (joblib).
+# Streamlit app (root-level). Loads best_model_v2.pkl (joblib).
+# Safe Plotly imports + guards; no sklearn shim code.
 
-# app.py (header)
-import os, time, json, sys, importlib.util
+import os, time, sys, importlib.util, json
 import numpy as np
 import pandas as pd
 import streamlit as st
 import joblib
 
-# TRY plotly imports safely (don’t crash if missing)
+# ───────────────────────────────────────────────────────────────────────────────
+# Try Plotly safely (app should not crash if Plotly is missing)
+# ───────────────────────────────────────────────────────────────────────────────
 try:
     import plotly.express as px
     import plotly.graph_objects as go
     PLOTLY_OK = True
-except Exception as _plotly_err:
-    px = None
-    go = None
-    PLOTLY_OK = False
+except Exception:
+    px, go, PLOTLY_OK = None, None, False
 
+# ───────────────────────────────────────────────────────────────────────────────
+# App config
+# ───────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="MaxAIS • KPI + Propensity", page_icon="📈", layout="wide")
 
-# Sidebar diagnostics so we can see what’s installed on Cloud
+DEFAULT_COST_MAP = {'Web': 40, 'Call Center': 70, 'Branch': 90, 'Agent': 120}
+TARGET_COL = "conversion"
+CLV_COL = "Customer Lifetime Value"  # optional; proxy used if missing
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Diagnostics (sidebar expander)
+# ───────────────────────────────────────────────────────────────────────────────
 with st.sidebar.expander("Environment diagnostics", expanded=False):
     st.write("Python:", sys.version)
-    st.write("Plotly available:", importlib.util.find_spec("plotly") is not None)
-    # Show versions if present
-    def _ver(modname):
+    st.write("Plotly installed:", importlib.util.find_spec("plotly") is not None)
+
+    def _ver(name):
         try:
-            m = __import__(modname)
+            m = __import__(name)
             return getattr(m, "__version__", "unknown")
         except Exception:
             return "missing"
@@ -44,19 +53,10 @@ with st.sidebar.expander("Environment diagnostics", expanded=False):
     })
 
 # ───────────────────────────────────────────────────────────────────────────────
-# App config
-# ───────────────────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Advanced Marketing KPI + Propensity", page_icon="📈", layout="wide")
-
-DEFAULT_COST_MAP = {'Web': 40, 'Call Center': 70, 'Branch': 90, 'Agent': 120}
-TARGET_COL = "conversion"
-CLV_COL = "Customer Lifetime Value"  # optional; we proxy if missing
-
-# ───────────────────────────────────────────────────────────────────────────────
-# Utilities
+# Helpers
 # ───────────────────────────────────────────────────────────────────────────────
 def _expected_columns_from_pipeline(pipe):
-    """Try to recover original feature names the ColumnTransformer expects."""
+    """Recover original feature names the ColumnTransformer expects."""
     try:
         pre = pipe.named_steps.get("pre") or pipe.named_steps.get("pre3")
         cols = []
@@ -67,13 +67,12 @@ def _expected_columns_from_pipeline(pipe):
                 cols.extend(cols_sel)
             elif isinstance(cols_sel, (tuple, np.ndarray, pd.Index)):
                 cols.extend(list(cols_sel))
-        # keep order & uniqueness
-        return list(dict.fromkeys(cols))
+        return list(dict.fromkeys(cols))  # unique, keep order
     except Exception:
         return None
 
 def ensure_columns_for_pipeline(df: pd.DataFrame, expected: list) -> pd.DataFrame:
-    """Ensure df has the exact columns the pipeline expects (missing -> NaN; keep order)."""
+    """Ensure df has exactly the columns the model expects (add missing as NaN; keep order)."""
     if expected is None:
         return df
     out = df.copy()
@@ -83,12 +82,12 @@ def ensure_columns_for_pipeline(df: pd.DataFrame, expected: list) -> pd.DataFram
     return out[expected]
 
 def proxy_clv(df: pd.DataFrame) -> pd.Series:
-    """Proxy CLV if no CLV column is present."""
+    """Proxy CLV if CLV column is missing."""
     monthly = df.get("Monthly Premium Auto", pd.Series(np.nan, index=df.index)).astype(float)
     months, margin = 12.0, 0.35
     prox = months * monthly * margin
     if prox.isna().all():
-        prox = pd.Series(12.0 * 100.0 * 0.35, index=df.index)  # default $420
+        prox = pd.Series(12.0 * 100.0 * 0.35, index=df.index)  # fallback $420
     return prox
 
 def compute_kpis(df: pd.DataFrame,
@@ -164,12 +163,12 @@ def fmt_pct(x): return "-" if pd.isna(x) else f"{100*x:.2f}%"
 def fmt_money(x): return "-" if pd.isna(x) else f"${x:,.0f}"
 
 # ───────────────────────────────────────────────────────────────────────────────
-# Model loader (no shims)
+# Model loader (no shims) — only load the clean artifact
 # ───────────────────────────────────────────────────────────────────────────────
-MODEL_CANDIDATES = ["best_model_v2.pkl"]  # only the new clean model
+MODEL_CANDIDATES = ["best_model_v2.pkl"]  # ensure this file is in the repo root
 
 @st.cache_data(show_spinner=False)
-def load_model(path):
+def load_model(path: str):
     return joblib.load(path)
 
 pipe = None
@@ -187,7 +186,7 @@ for p in MODEL_CANDIDATES:
 # ───────────────────────────────────────────────────────────────────────────────
 # Sidebar
 # ───────────────────────────────────────────────────────────────────────────────
-st.sidebar.title("KPI + Propensity")
+st.sidebar.title("MaxAIS • KPI + Propensity")
 st.sidebar.caption("Advanced Marketing KPI Performance — Conversion • CLV • CPA • ROI • Propensity")
 
 with st.sidebar.expander("Cost per Acquisition (override)", expanded=False):
@@ -204,7 +203,7 @@ section = st.sidebar.radio("Navigate",
 if pipe is not None:
     st.sidebar.success(model_info)
 else:
-    st.sidebar.warning("Model not loaded. Put best_model_v2.pkl in repo root.")
+    st.sidebar.error(f"No model loaded. Ensure {MODEL_CANDIDATES[0]} is in the repo root.")
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Data input
@@ -249,20 +248,25 @@ if section == "📊 KPIs":
         else:
             st.info("No ground-truth conversion column found. Switch to **Propensity** to score first; you’ll see **Estimated KPIs** there.")
 
-        if has_target:
-            if "by_channel" in kpis and isinstance(kpis["by_channel"], pd.DataFrame) and len(kpis["by_channel"]):
-                by_ch = kpis["by_channel"]
-                st.markdown("#### By Sales Channel")
-                st.dataframe(by_ch, use_container_width=True)
+        if has_target and "by_channel" in kpis and isinstance(kpis["by_channel"], pd.DataFrame) and len(kpis["by_channel"]):
+            by_ch = kpis["by_channel"]
+            st.markdown("#### By Sales Channel")
+            st.dataframe(by_ch, use_container_width=True)
+            if not PLOTLY_OK:
+                st.warning("Plotly isn’t installed in this build. Add `plotly==5.24.1` to requirements.txt and redeploy.")
+            else:
                 fig = px.bar(by_ch, x="Sales Channel", y="conversion_rate",
                              title="Conversion Rate by Channel",
                              text=by_ch["conversion_rate"].map(lambda v: f"{100*v:.1f}%"))
                 st.plotly_chart(fig, use_container_width=True)
 
-            if "by_offer" in kpis and isinstance(kpis["by_offer"], pd.DataFrame) and len(kpis["by_offer"]):
-                by_offer = kpis["by_offer"]
-                st.markdown("#### By Offer Type")
-                st.dataframe(by_offer, use_container_width=True)
+        if has_target and "by_offer" in kpis and isinstance(kpis["by_offer"], pd.DataFrame) and len(kpis["by_offer"]):
+            by_offer = kpis["by_offer"]
+            st.markdown("#### By Offer Type")
+            st.dataframe(by_offer, use_container_width=True)
+            if not PLOTLY_OK:
+                st.warning("Plotly isn’t installed in this build. Add `plotly==5.24.1` to requirements.txt and redeploy.")
+            else:
                 fig2 = px.bar(by_offer, x="Renew Offer Type", y="roi",
                               title="ROI by Offer Type",
                               text=by_offer["roi"].map(lambda v: f"{100*v:.1f}%"))
@@ -276,7 +280,7 @@ elif section == "🤖 Propensity":
     if df is None:
         st.warning("Upload data to score.")
     elif pipe is None:
-        st.warning("Model not loaded. Put best_model_v2.pkl in repo root.")
+        st.warning(f"Model not loaded. Put {MODEL_CANDIDATES[0]} in repo root.")
     else:
         expected_cols = _expected_columns_from_pipeline(pipe)
         df_for_model = ensure_columns_for_pipeline(df, expected_cols)
@@ -296,14 +300,16 @@ elif section == "🤖 Propensity":
 
         colA, colB = st.columns([2, 1])
         with colA:
-            figp = px.histogram(df_scored, x="propensity", nbins=30, title="Propensity Distribution")
-            st.plotly_chart(figp, use_container_width=True)
+            if not PLOTLY_OK:
+                st.warning("Plotly isn’t installed in this build. Add `plotly==5.24.1` to requirements.txt and redeploy.")
+            else:
+                figp = px.histogram(df_scored, x="propensity", nbins=30, title="Propensity Distribution")
+                st.plotly_chart(figp, use_container_width=True)
         with colB:
             thr = st.slider("Decision threshold for estimated conversion", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
             est_converted = int((df_scored["propensity"] >= thr).sum())
             st.metric("Estimated Converts @ threshold", est_converted)
 
-        # Estimated KPIs when no ground-truth conversion present
         if TARGET_COL not in df_scored.columns:
             dtmp = df_scored.copy()
             dtmp[TARGET_COL] = (dtmp["propensity"] >= thr).astype(int)
@@ -341,13 +347,16 @@ elif section == "📈 Lift & Gain":
         lift = lift_table(df_tmp[TARGET_COL], df_tmp["propensity"], bins=10)
         st.dataframe(lift, use_container_width=True)
 
-        fig_lift = px.line(lift, y="lift", title="Lift by Decile")
-        fig_lift.update_layout(xaxis_title="Decile (high→low propensity)", yaxis_title="Lift")
-        st.plotly_chart(fig_lift, use_container_width=True)
+        if not PLOTLY_OK:
+            st.warning("Plotly isn’t installed in this build. Add `plotly==5.24.1` to requirements.txt and redeploy.")
+        else:
+            fig_lift = px.line(lift, y="lift", title="Lift by Decile")
+            fig_lift.update_layout(xaxis_title="Decile (high→low propensity)", yaxis_title="Lift")
+            st.plotly_chart(fig_lift, use_container_width=True)
 
-        fig_cum = px.line(lift, y="cum_lift", title="Cumulative Lift")
-        fig_cum.update_layout(xaxis_title="Decile (cumulative)", yaxis_title="Cumulative Lift")
-        st.plotly_chart(fig_cum, use_container_width=True)
+            fig_cum = px.line(lift, y="cum_lift", title="Cumulative Lift")
+            fig_cum.update_layout(xaxis_title="Decile (cumulative)", yaxis_title="Cumulative Lift")
+            st.plotly_chart(fig_cum, use_container_width=True)
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Calibration
@@ -374,12 +383,15 @@ elif section == "🧪 Calibration":
             obs=(TARGET_COL, "mean")
         ).sort_values("avg_p")
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=cal["avg_p"], y=cal["obs"], mode="lines+markers", name="Model"))
-        fig.add_trace(go.Scatter(x=[0,1], y=[0,1], mode="lines", name="Perfectly calibrated", line=dict(dash="dash")))
-        fig.update_layout(title="Calibration: Predicted vs Observed",
-                          xaxis_title="Predicted probability", yaxis_title="Observed frequency")
-        st.plotly_chart(fig, use_container_width=True)
+        if not PLOTLY_OK:
+            st.warning("Plotly isn’t installed in this build. Add `plotly==5.24.1` to requirements.txt and redeploy.")
+        else:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=cal["avg_p"], y=cal["obs"], mode="lines+markers", name="Model"))
+            fig.add_trace(go.Scatter(x=[0,1], y=[0,1], mode="lines", name="Perfectly calibrated", line=dict(dash="dash")))
+            fig.update_layout(title="Calibration: Predicted vs Observed",
+                              xaxis_title="Predicted probability", yaxis_title="Observed frequency")
+            st.plotly_chart(fig, use_container_width=True)
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Footer
