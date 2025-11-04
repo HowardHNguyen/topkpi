@@ -57,7 +57,18 @@ st.set_page_config(page_title="Marketing KPI & Propensity Intelligence", page_ic
 
 with st.expander("About This Project", expanded=False):
     st.markdown("""
-    ... (content below) ...
+        ### 💡 About This Project
+    This app and its accompanying article — **Advanced Marketing KPI Performance with Data Science** — were created to bridge the gap between traditional marketing metrics and modern AI intelligence.
+
+    In most marketing teams, KPIs such as **Conversion Rate (CR)**, **Customer Lifetime Value (CLV)**, **Cost per Acquisition (CPA)**, and **Return on Investment (ROI)** are analyzed separately.  
+    This project integrates them within a **predictive data-science framework** that reveals how they interact, enabling data-driven decision-making instead of static reporting.
+
+    ---
+
+    ### 🎯 **Purpose**
+    To empower marketing leaders, analysts, and growth teams to **move from descriptive to prescriptive insights**, using predictive models that forecast conversions, simulate ROI, and recommend optimal channel strategies.
+
+    ---
     """)
 
 DEFAULT_COST_MAP = {'Web': 40, 'Call Center': 70, 'Branch': 90, 'Agent': 120}
@@ -593,45 +604,3 @@ elif section == "🧪 Calibration":
 # ───────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.caption("© Howard Nguyen, PhD • KPI dashboard and calibrated propensity model. If CLV is missing, a proxy is used for ROI.")
-
-### 💡 About This Project
-This app and its accompanying article — **Advanced Marketing KPI Performance with Data Science** — were created to bridge the gap between traditional marketing metrics and modern AI intelligence.
-
-In most marketing teams, KPIs such as **Conversion Rate (CR)**, **Customer Lifetime Value (CLV)**, **Cost per Acquisition (CPA)**, and **Return on Investment (ROI)** are analyzed separately.  
-This project integrates them within a **predictive data-science framework** that reveals how they interact, enabling data-driven decision-making instead of static reporting.
-
----
-
-### 🎯 **Purpose**
-To empower marketing leaders, analysts, and growth teams to **move from descriptive to prescriptive insights**, using predictive models that forecast conversions, simulate ROI, and recommend optimal channel strategies.
-
----
-
-### ⚙️ **How It Was Built**
-- **Dataset:** Realistic customer and policy data (demographics, claims, sales channels, offers).
-- **Modeling Stack:** `scikit-learn`, `LightGBM`, `XGBoost`, and a calibrated ensemble pipeline trained for **propensity modeling**.
-- **Metrics:** CR, CLV, CPA, and ROI dynamically computed for every uploaded dataset.
-- **Validation:** Stratified CV, grouped CV by customer, and permutation AUC to detect overfitting.
-- **Visualization:** Interactive **Plotly** dashboards with “How to Read This Section” notes for clarity.
-- **Deployment:** Streamlit + GitHub + Python 3.12 environment (`scikit-learn 1.6.1`, `lightgbm 4.5.0`, `joblib 1.4.2`).
-
----
-
-### 🧠 **Key Methods**
-1. **Data Engineering** – cleaning, encoding, and feature balancing (SMOTE & feature selection).  
-2. **Predictive Modeling** – comparing RF, XGB, LGBM, CNN, and Stacking Gen AI for best calibrated AUC.  
-3. **KPI Simulation Engine** – live formulas for CR, CLV, CPA, and ROI tied to sidebar sliders.  
-4. **Explainable Visuals** – contextual notes for each KPI, Lift, Gain, and Calibration plot.  
-5. **Schema Validation** – automatic checklist ensures any uploaded CSV matches model features.
-
----
-
-### 🚀 **Why It Matters**
-This project demonstrates how **data science transforms marketing KPIs** into actionable intelligence:  
-- **Marketers** can instantly visualize ROI by channel and offer.  
-- **Executives** can test “what-if” CPA or budget scenarios live.  
-- **Analysts** can upload new data and replicate results seamlessly.
-
-> **Analytics → Insight → Action.**  
-> The article educates; the app operationalizes — together they turn metrics into measurable growth.
-
