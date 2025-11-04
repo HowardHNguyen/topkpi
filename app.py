@@ -58,17 +58,34 @@ st.set_page_config(page_title="Marketing KPI & Propensity Intelligence", page_ic
 with st.expander("About This Project", expanded=False):
     st.markdown("""
         ### 💡 About This Project
-    This app and its accompanying article — **Advanced Marketing KPI Performance with Data Science** — were created to bridge the gap between traditional marketing metrics and modern AI intelligence.
+        This app and its accompanying article — **Advanced Marketing KPI Performance with Data Science** — were created to bridge the gap between traditional marketing metrics and modern AI intelligence.
 
-    In most marketing teams, KPIs such as **Conversion Rate (CR)**, **Customer Lifetime Value (CLV)**, **Cost per Acquisition (CPA)**, and **Return on Investment (ROI)** are analyzed separately.  
-    This project integrates them within a **predictive data-science framework** that reveals how they interact, enabling data-driven decision-making instead of static reporting.
+        In most marketing teams, KPIs such as **Conversion Rate (CR)**, **Customer Lifetime Value (CLV)**, **Cost per Acquisition (CPA)**, and **Return on Investment (ROI)** are analyzed separately.  
+        This project integrates them within a **predictive data-science framework** that reveals how they interact, enabling data-driven decision-making instead of static reporting.
 
-    ---
+        ### 🎯 **Purpose**
+        To empower marketing leaders, analysts, and growth teams to **move from descriptive to prescriptive insights**, using predictive models that forecast conversions, simulate ROI, and recommend optimal channel strategies.
 
-    ### 🎯 **Purpose**
-    To empower marketing leaders, analysts, and growth teams to **move from descriptive to prescriptive insights**, using predictive models that forecast conversions, simulate ROI, and recommend optimal channel strategies.
+        ### ⚙️ **How It Was Built**
+        - **Dataset:** Realistic customer and policy data (demographics, claims, sales channels, offers).
+        - **Modeling Stack:** `scikit-learn`, `LightGBM`, `XGBoost`, and a calibrated ensemble pipeline trained for **propensity modeling**.
+        - **Metrics:** CR, CLV, CPA, and ROI dynamically computed for every uploaded dataset.
+        - **Validation:** Stratified CV, grouped CV by customer, and permutation AUC to detect overfitting.
+        - **Visualization:** Interactive **Plotly** dashboards with “How to Read This Section” notes for clarity.
+        - **Deployment:** Streamlit + GitHub + Python 3.12 environment (`scikit-learn 1.6.1`, `lightgbm 4.5.0`, `joblib 1.4.2`).
 
-    ---
+        ### 🧠 **Key Methods**
+        1. **Data Engineering** – cleaning, encoding, and feature balancing (SMOTE & feature selection).  
+        2. **Predictive Modeling** – comparing RF, XGB, LGBM, CNN, and Stacking Gen AI for best calibrated AUC.  
+        3. **KPI Simulation Engine** – live formulas for CR, CLV, CPA, and ROI tied to sidebar sliders.  
+        4. **Explainable Visuals** – contextual notes for each KPI, Lift, Gain, and Calibration plot.  
+        5. **Schema Validation** – automatic checklist ensures any uploaded CSV matches model features.
+
+        ### 🚀 **Why It Matters**
+        This project demonstrates how **data science transforms marketing KPIs** into actionable intelligence:  
+        - **Marketers** can instantly visualize ROI by channel and offer.  
+        - **Executives** can test “what-if” CPA or budget scenarios live.  
+        - **Analysts** can upload new data and replicate results seamlessly.
     """)
 
 DEFAULT_COST_MAP = {'Web': 40, 'Call Center': 70, 'Branch': 90, 'Agent': 120}
@@ -211,7 +228,7 @@ def fmt_money(x): return "-" if pd.isna(x) else f"${x:,.0f}"
 
 # Additional notes for Green vs Red for checking csv file upload
 def render_schema_checklist(df: pd.DataFrame | None):
-    with st.sidebar.expander("Schema checklist", expanded=True):
+    with st.sidebar.expander("Schema checklist", expanded=False):
         if df is None:
             st.info("Upload a CSV to validate the schema. Use `sample_data.csv` as a template.")
             st.caption(
@@ -333,7 +350,7 @@ render_schema_checklist(df)
 # ───────────────────────────────────────────────────────────────────────────────
 if section == "📊 KPIs":
     st.subheader("KPI Overview")
-    with st.expander("How to read this section", expanded=True):
+    with st.expander("How to read this section", expanded=False):
         st.markdown(
             """
             **Goal:** See where profit is created (by channel/offer) and whether budget is efficient.
@@ -412,7 +429,7 @@ if section == "📊 KPIs":
 # ───────────────────────────────────────────────────────────────────────────────
 elif section == "🤖 Propensity":
     st.subheader("Propensity Scoring")
-    with st.expander("How to read this section", expanded=True):
+    with st.expander("How to read this section", expanded=False):
         st.markdown(
                 """
         **Goal:** Rank customers by likelihood to convert and decide *how deep* to target.
@@ -496,7 +513,7 @@ elif section == "🤖 Propensity":
 # ───────────────────────────────────────────────────────────────────────────────
 elif section == "📈 Lift & Gain":
     st.subheader("Lift & Cumulative Gain")
-    with st.expander("How to read this section", expanded=True):
+    with st.expander("How to read this section", expanded=False):
         st.markdown(
             """
         **Goal:** Prove the model’s business value and decide how many deciles to target.  
@@ -552,7 +569,7 @@ elif section == "📈 Lift & Gain":
 # ───────────────────────────────────────────────────────────────────────────────
 elif section == "🧪 Calibration":
     st.subheader("Calibration Check (Binning)")
-    with st.expander("How to read this section", expanded=True):
+    with st.expander("How to read this section", expanded=False):
         st.markdown(
                 """
         **Goal:** Verify that predicted probabilities match real-world outcomes.  
