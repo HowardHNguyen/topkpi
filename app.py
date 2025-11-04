@@ -35,10 +35,25 @@ def load_any_pickle(path: str):
     with open(path, "rb") as f:
         return pickle.load(f)
     
+# === Schema requirements ===
+REQUIRED_FEATURES = [
+    "State", "Coverage", "Education", "EmploymentStatus", "Income",
+    "Location Code", "Marital Status", "Monthly Premium Auto",
+    "Months Since Last Claim", "Months Since Policy Inception",
+    "Number of Open Complaints", "Number of Policies",
+    "Renew Offer Type", "Sales Channel", "Total Claim Amount",
+    "Vehicle Class", "Vehicle Size"
+]
+OPTIONAL_FEATURES = [
+    # Helpful but not required for scoring
+    "conversion",                      # for back-tested KPIs, Lift, Calibration
+    "Customer Lifetime Value"          # for realized CLV; proxy used if missing
+]
+
 # ───────────────────────────────────────────────────────────────────────────────
 # App config
 # ───────────────────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="MaxAIS • KPI + Propensity", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Marketing KPI & Propensity Intelligence", page_icon="📊", layout="wide")
 
 DEFAULT_COST_MAP = {'Web': 40, 'Call Center': 70, 'Branch': 90, 'Agent': 120}
 TARGET_COL = "conversion"
@@ -178,6 +193,56 @@ def lift_table(y_true: pd.Series, y_pred: pd.Series, bins: int = 10) -> pd.DataF
 def fmt_pct(x): return "-" if pd.isna(x) else f"{100*x:.2f}%"
 def fmt_money(x): return "-" if pd.isna(x) else f"${x:,.0f}"
 
+# Additional notes for Green vs Red for checking csv file upload
+def render_schema_checklist(df: pd.DataFrame | None):
+    with st.sidebar.expander("Schema checklist", expanded=True):
+        if df is None:
+            st.info("Upload a CSV to validate the schema. Use `sample_data.csv` as a template.")
+            st.caption(
+                "Required features drive scoring; optional fields enable realized CLV/actual KPI back-tests."
+            )
+            st.code(
+                "Required:\n" + ", ".join(REQUIRED_FEATURES) + "\n\n"
+                "Optional:\n" + ", ".join(OPTIONAL_FEATURES),
+                language="text",
+            )
+            return
+
+        cols = set(df.columns)
+        missing = [c for c in REQUIRED_FEATURES if c not in cols]
+        extras  = sorted(list(cols.difference(set(REQUIRED_FEATURES + OPTIONAL_FEATURES))))
+
+        ok = (len(missing) == 0)
+        if ok:
+            st.success("All required columns are present. ✅")
+        else:
+            st.error(f"Missing {len(missing)} required column(s).")
+
+        # Compact checklist
+        st.write("**Required features**")
+        for c in REQUIRED_FEATURES:
+            st.markdown(f"- {'✅' if c in cols else '❌'} `{c}`")
+
+        st.write("**Optional features**")
+        for c in OPTIONAL_FEATURES:
+            st.markdown(f"- {'✅' if c in cols else '➖'} `{c}`")
+
+        if extras:
+            st.write("**Extra columns (ignored by the model)**")
+            st.caption(", ".join(extras))
+
+        # Quick tip panel
+        with st.popover("Tips"):
+            st.markdown(
+                """
+- Column names must match **exactly** (case & spacing).
+- Categorical values not seen in training are handled safely.
+- If `conversion` is missing, KPIs are **estimated** from scores until actuals are available.
+- If `Customer Lifetime Value` is missing, the app uses a **conservative proxy** so ROI still works.
+                """
+            )
+
+
 # ───────────────────────────────────────────────────────────────────────────────
 # Model loader (no shims) — only load the clean artifact
 # ───────────────────────────────────────────────────────────────────────────────
@@ -224,8 +289,8 @@ else:
 # ───────────────────────────────────────────────────────────────────────────────
 # Data input
 # ───────────────────────────────────────────────────────────────────────────────
-st.title("Advanced Marketing KPI Performance with Data Science")
-st.write("**Conversion • CLV • CPA • ROI • Propensity** — ready for executive review and action.")
+st.title("Marketing KPI & Propensity Intelligence by Howard Nguyen")
+st.write("**Conversion • CLV • CPA • ROI • Propensity** — actionable, executive-ready analytics with calibrated predictions.")
 
 uploaded = st.file_uploader("Upload CSV (same schema as training)", type=["csv"], accept_multiple_files=False)
 
@@ -244,11 +309,32 @@ if df is not None:
 
 has_target = df is not None and (TARGET_COL in df.columns)
 
+# After df is set (or left as None)
+render_schema_checklist(df)
+
 # ───────────────────────────────────────────────────────────────────────────────
 # KPIs
 # ───────────────────────────────────────────────────────────────────────────────
 if section == "📊 KPIs":
     st.subheader("KPI Overview")
+    with st.expander("How to read this section", expanded=True):
+        st.markdown(
+            """
+            **Goal:** See where profit is created (by channel/offer) and whether budget is efficient.
+
+            **Tiles**
+            - **Conversion Rate** – % of rows with `conversion=1`.
+            - **Acquired** – number of converted customers.
+            - **CPA** – average acquisition cost for **converted** customers (uses sidebar CPAs).
+            - **CLV Realized** – sum of realized value from converters (uses CLV column or proxy).
+            - **ROI** – `(CLV Realized − Spend) / Spend`.
+
+            **Good to know**
+            - If CLV is missing, the app uses a **conservative CLV proxy** so ROI still works.
+            - Change the **CPA sliders** (left) to simulate media price changes; KPIs update instantly.
+            """
+        )
+
     if df is None:
         st.warning("Upload data to compute KPIs.")
     else:
@@ -270,11 +356,19 @@ if section == "📊 KPIs":
             st.dataframe(by_ch, use_container_width=True)
             if not PLOTLY_OK:
                 st.warning("Plotly isn’t installed in this build. Add `plotly==5.24.1` to requirements.txt and redeploy.")
+                st.caption("**Conversion Rate by Channel** — Higher bars = more efficient funnel or better lead quality.")
             else:
                 fig = px.bar(by_ch, x="Sales Channel", y="conversion_rate",
                              title="Conversion Rate by Channel",
                              text=by_ch["conversion_rate"].map(lambda v: f"{100*v:.1f}%"))
                 st.plotly_chart(fig, use_container_width=True)
+                st.markdown(
+                    """
+                **Interpretation:**  
+                - Use this to **shift spend**: scale channels with higher conversion and acceptable CPA.  
+                - Combine with **ROI by Offer** to confirm profitability, not just efficiency.
+                    """
+                )
 
         if has_target and "by_offer" in kpis and isinstance(kpis["by_offer"], pd.DataFrame) and len(kpis["by_offer"]):
             by_offer = kpis["by_offer"]
@@ -282,17 +376,42 @@ if section == "📊 KPIs":
             st.dataframe(by_offer, use_container_width=True)
             if not PLOTLY_OK:
                 st.warning("Plotly isn’t installed in this build. Add `plotly==5.24.1` to requirements.txt and redeploy.")
+                st.caption("**ROI by Offer Type** — Bars show profitability after acquisition cost.")
             else:
                 fig2 = px.bar(by_offer, x="Renew Offer Type", y="roi",
                               title="ROI by Offer Type",
                               text=by_offer["roi"].map(lambda v: f"{100*v:.1f}%"))
                 st.plotly_chart(fig2, use_container_width=True)
+                st.markdown(
+                    """
+                **Interpretation:**  
+                - **Pause** offers with near-zero ROI (spend returns ~$0).  
+                - **Scale** offers with strong ROI **and** sufficient volume.  
+                - If CPA increases (sidebar), check whether ROI still clears your hurdle.
+                    """
+                )
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Propensity
 # ───────────────────────────────────────────────────────────────────────────────
 elif section == "🤖 Propensity":
     st.subheader("Propensity Scoring")
+    with st.expander("How to read this section", expanded=True):
+        st.markdown(
+                """
+        **Goal:** Rank customers by likelihood to convert and decide *how deep* to target.
+
+        - **Top prospects** – highest probability first (use for outreach lists or routing).
+        - **Propensity Distribution** – wider right tail = more “easy wins.”
+        - **Threshold slider** – pick the **operating point** (e.g., top 20–30%).  
+        The app shows **Estimated Converts** at that threshold.
+
+        **Playbook**
+        1. Start with a threshold that captures the **top deciles** (e.g., 0.6–0.7).
+        2. Check **KPI estimates** (if ground truth missing) and **CPA** sensitivity.
+        3. Expand or contract the target based on **capacity** and **ROI**.
+                """
+            )   
     if df is None:
         st.warning("Upload data to score.")
     elif pipe is None:
@@ -313,6 +432,7 @@ elif section == "🤖 Propensity":
 
         st.write("**Top prospects** (highest probability first):")
         st.dataframe(df_scored.sort_values("propensity", ascending=False).head(25), use_container_width=True)
+        st.caption("**Propensity Distribution** — Right-skewed = model finds many high-probability customers.")
 
         colA, colB = st.columns([2, 1])
         with colA:
@@ -325,6 +445,13 @@ elif section == "🤖 Propensity":
             thr = st.slider("Decision threshold for estimated conversion", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
             est_converted = int((df_scored["propensity"] >= thr).sum())
             st.metric("Estimated Converts @ threshold", est_converted)
+            st.caption("**Threshold** — Sets how deep you go. Lower threshold = more volume, lower precision.")
+            st.markdown(
+                """
+            **Note:** These are **estimated KPIs** using model scores (no ground truth).  
+            Use them to **size campaigns** before you collect actual conversion outcomes.
+                """
+            )
 
         if TARGET_COL not in df_scored.columns:
             dtmp = df_scored.copy()
@@ -338,7 +465,13 @@ elif section == "🤖 Propensity":
             c3.metric("CPA", fmt_money(overall["cpa"]))
             c4.metric("CLV Realized", fmt_money(overall["clv_realized"]))
             c5.metric("ROI", fmt_pct(overall["roi"]))
-
+        st.markdown(
+            """
+        **Interpretation:**  
+        - A **fat right tail** means you can target shallow (top deciles) and still hit goals.  
+        - If the curve is flat, consider re-training with fresh features or better labels.
+            """
+        )
         csv_bytes = df_scored.to_csv(index=False).encode("utf-8")
         st.download_button("Download scored CSV", data=csv_bytes, file_name="scored_output.csv", mime="text/csv")
 
@@ -347,6 +480,20 @@ elif section == "🤖 Propensity":
 # ───────────────────────────────────────────────────────────────────────────────
 elif section == "📈 Lift & Gain":
     st.subheader("Lift & Cumulative Gain")
+    with st.expander("How to read this section", expanded=True):
+        st.markdown(
+            """
+        **Goal:** Prove the model’s business value and decide how many deciles to target.  
+
+        - **Lift** – conversion rate in a decile vs overall average (e.g., 6× in top decile).  
+        - **Cumulative Lift** – lift as you include more deciles from the top down.
+
+        **Rules of thumb**
+        - Top decile lift **> 3×** is strong; **> 5×** is excellent.  
+        - If lift collapses by decile 3–4, target fewer deciles (higher precision).
+                """
+        )
+
     if df is None:
         st.warning("Upload data to compute lift.")
     elif pipe is None:
@@ -362,29 +509,56 @@ elif section == "📈 Lift & Gain":
 
         lift = lift_table(df_tmp[TARGET_COL], df_tmp["propensity"], bins=10)
         st.dataframe(lift, use_container_width=True)
+        st.caption("**Lift by Decile** — How much better each decile is vs targeting everyone.")
 
         if not PLOTLY_OK:
             st.warning("Plotly isn’t installed in this build. Add `plotly==5.24.1` to requirements.txt and redeploy.")
+
         else:
             fig_lift = px.line(lift, y="lift", title="Lift by Decile")
             fig_lift.update_layout(xaxis_title="Decile (high→low propensity)", yaxis_title="Lift")
+            st.caption("**Cumulative Lift** — What happens as you include more of the ranked list.")
             st.plotly_chart(fig_lift, use_container_width=True)
 
             fig_cum = px.line(lift, y="cum_lift", title="Cumulative Lift")
             fig_cum.update_layout(xaxis_title="Decile (cumulative)", yaxis_title="Cumulative Lift")
             st.plotly_chart(fig_cum, use_container_width=True)
+            st.markdown(
+                """
+            **Interpretation:**  
+            - A steep drop after decile 1–2 suggests a **tight focus** (smaller, higher-quality audience).  
+            - A gradual slope suggests you can **scale** to more deciles without sharp efficiency loss.
+                """
+            )
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Calibration
 # ───────────────────────────────────────────────────────────────────────────────
 elif section == "🧪 Calibration":
     st.subheader("Calibration Check (Binning)")
+    with st.expander("How to read this section", expanded=True):
+        st.markdown(
+                """
+        **Goal:** Verify that predicted probabilities match real-world outcomes.  
+
+        - Blue line close to dashed **diagonal** = **well-calibrated**.  
+        - **Overconfident** (above diagonal at low x): model predicts too high for low scores.  
+        - **Underconfident** (below diagonal): model predicts too low.
+
+        **Why it matters**
+        - Good calibration makes **ROI forecasts** (score × CLV) trustworthy.  
+        - If miscalibrated, re-calibrate (isotonic / Platt) or re-train with recent data.
+                """
+        )
+
     if df is None:
         st.warning("Upload data to check calibration.")
     elif pipe is None:
         st.warning("Model not loaded.")
     elif TARGET_COL not in df.columns:
         st.info("Calibration requires ground-truth conversion column.")
+        st.caption("**Predicted vs Observed** — Dots close to the diagonal are reliable probabilities.")
+
     else:
         expected_cols = _expected_columns_from_pipeline(pipe)
         df_for_model = ensure_columns_for_pipeline(df, expected_cols)
