@@ -9,37 +9,6 @@ import pandas as pd
 import streamlit as st
 import joblib
 
-# Set page metadata and layout
-st.set_page_config(
-    page_title="Marketing KPI & Propensity Intelligence",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Minimal CSS: hide ONLY Streamlit toolbar & watermark; NEVER hide header or sidebar
-st.markdown("""
-<style>
-/* --- keep sidebar and header visible --- */
-div[data-testid="stSidebar"] { visibility: visible !important; display: block !important; }
-header { visibility: visible !important; }
-#MainMenu { visibility: visible !important; }
-
-/* --- hide top-right toolbar (Fork / GitHub / ⋮) --- */
-div[data-testid="stToolbar"] { visibility: hidden !important; height: 0 !important; }
-
-/* sometimes Streamlit adds a small decoration/status area near the toolbar */
-div[data-testid="stDecoration"] { display: none !important; }
-div[data-testid="stStatusWidget"] { display: none !important; }
-
-/* --- hide bottom-right Streamlit watermark/buttons --- */
-div[class*="stAppBottomRightButtons"] { display: none !important; }
-
-/* defensive: hide any deploy/manage header buttons if they appear */
-button.stDeployButton, .stDeployButton { display: none !important; }
-</style>
-""", unsafe_allow_html=True)
-
 # ───────────────────────────────────────────────────────────────────────────────
 # Try Plotly safely (app should not crash if Plotly is missing)
 # ───────────────────────────────────────────────────────────────────────────────
