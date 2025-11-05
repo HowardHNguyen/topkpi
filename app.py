@@ -17,20 +17,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Hide Streamlit default menus, buttons, and branding icons
+# --- HIDE ONLY TOP-RIGHT & BOTTOM-RIGHT ICONS ---
 hide_streamlit_style = """
     <style>
-    /* Hide main menu and footer */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-
-    /* Hide top-right toolbar (Fork, GitHub, ⋮ menu) */
+    /* Hide Streamlit's top-right toolbar (Fork, GitHub, ⋮ menu) */
     [data-testid="stToolbar"] {visibility: hidden !important;}
     .stToolbar {display: none !important;}
     .stToolbarActions {display: none !important;}
     .stActionButton {visibility: hidden;}
-    .st-emotion-cache-1dp5vir {display: none;}
     .stDeployButton {display: none !important;}
     [data-testid="stDecoration"] {display: none;}
     [data-testid="stStatusWidget"] {display: none;}
@@ -38,6 +32,10 @@ hide_streamlit_style = """
     /* Hide Streamlit bottom-right watermark */
     .stAppDeployButton, .st-emotion-cache-6qob1r {display: none !important;}
     .stAppBottomRightButtons {display: none !important;}
+
+    /* Keep the sidebar (control menu) fully visible */
+    [data-testid="stSidebar"] {visibility: visible !important;}
+    [data-testid="stSidebarNav"] {visibility: visible !important;}
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
