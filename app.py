@@ -9,6 +9,39 @@ import pandas as pd
 import streamlit as st
 import joblib
 
+# Set page metadata and layout
+st.set_page_config(
+    page_title="Marketing KPI & Propensity Intelligence",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Hide Streamlit default menus, buttons, and branding icons
+hide_streamlit_style = """
+    <style>
+    /* Hide main menu and footer */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* Hide top-right toolbar (Fork, GitHub, ⋮ menu) */
+    [data-testid="stToolbar"] {visibility: hidden !important;}
+    .stToolbar {display: none !important;}
+    .stToolbarActions {display: none !important;}
+    .stActionButton {visibility: hidden;}
+    .st-emotion-cache-1dp5vir {display: none;}
+    .stDeployButton {display: none !important;}
+    [data-testid="stDecoration"] {display: none;}
+    [data-testid="stStatusWidget"] {display: none;}
+
+    /* Hide Streamlit bottom-right watermark */
+    .stAppDeployButton, .st-emotion-cache-6qob1r {display: none !important;}
+    .stAppBottomRightButtons {display: none !important;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 # ───────────────────────────────────────────────────────────────────────────────
 # Try Plotly safely (app should not crash if Plotly is missing)
 # ───────────────────────────────────────────────────────────────────────────────
