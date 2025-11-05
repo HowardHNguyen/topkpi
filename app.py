@@ -17,28 +17,28 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- HIDE ONLY TOP-RIGHT & BOTTOM-RIGHT ICONS ---
-hide_streamlit_style = """
-    <style>
-    /* Hide Streamlit's top-right toolbar (Fork, GitHub, ⋮ menu) */
-    [data-testid="stToolbar"] {visibility: hidden !important;}
-    .stToolbar {display: none !important;}
-    .stToolbarActions {display: none !important;}
-    .stActionButton {visibility: hidden;}
-    .stDeployButton {display: none !important;}
-    [data-testid="stDecoration"] {display: none;}
-    [data-testid="stStatusWidget"] {display: none;}
+# Minimal CSS: hide ONLY Streamlit toolbar & watermark; NEVER hide header or sidebar
+st.markdown("""
+<style>
+/* --- keep sidebar and header visible --- */
+div[data-testid="stSidebar"] { visibility: visible !important; display: block !important; }
+header { visibility: visible !important; }
+#MainMenu { visibility: visible !important; }
 
-    /* Hide Streamlit bottom-right watermark */
-    .stAppDeployButton, .st-emotion-cache-6qob1r {display: none !important;}
-    .stAppBottomRightButtons {display: none !important;}
+/* --- hide top-right toolbar (Fork / GitHub / ⋮) --- */
+div[data-testid="stToolbar"] { visibility: hidden !important; height: 0 !important; }
 
-    /* Keep the sidebar (control menu) fully visible */
-    [data-testid="stSidebar"] {visibility: visible !important;}
-    [data-testid="stSidebarNav"] {visibility: visible !important;}
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+/* sometimes Streamlit adds a small decoration/status area near the toolbar */
+div[data-testid="stDecoration"] { display: none !important; }
+div[data-testid="stStatusWidget"] { display: none !important; }
+
+/* --- hide bottom-right Streamlit watermark/buttons --- */
+div[class*="stAppBottomRightButtons"] { display: none !important; }
+
+/* defensive: hide any deploy/manage header buttons if they appear */
+button.stDeployButton, .stDeployButton { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Try Plotly safely (app should not crash if Plotly is missing)
