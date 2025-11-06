@@ -55,26 +55,28 @@ OPTIONAL_FEATURES = [
 # ───────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Marketing KPI & Propensity Intelligence", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
-# --- Hide ONLY the top-right toolbar + bottom-right watermark ---
-HIDE_CHROME_CSS = """
+# --- Hide top-right & bottom-right chrome, KEEP sidebar toggle visible ---
+st.markdown("""
 <style>
-/* Keep the header & sidebar VISIBLE */
+/* ✅ Keep header & sidebar (and its collapse/expand control) visible */
 header { visibility: visible !important; }
 div[data-testid="stSidebar"] { visibility: visible !important; display: block !important; }
+/* DO NOT hide the decoration strip; it contains the small left chevron */
+div[data-testid="stDecoration"] { display: block !important; visibility: visible !important; }
 
-/* Top-right toolbar (Fork / GitHub / ⋮) */
-div[data-testid="stToolbar"] { visibility: hidden !important; display: none !important; }
-.stToolbar, .stToolbarActions, .stActionButton, .stDeployButton { display: none !important; }
-div[data-testid="stDecoration"], div[data-testid="stStatusWidget"] { display: none !important; }
+/* 🚫 Hide only the top-right toolbar contents (Fork, GitHub, ⋮) but leave the toolbar container alive */
+div[data-testid="stToolbar"] > * { visibility: hidden !important; }
+div[data-testid="stToolbar"] svg,
+div[data-testid="stToolbar"] a,
+div[data-testid="stToolbar"] button { display: none !important; }
 
-/* Bottom-right Streamlit icons/watermark */
-.stAppBottomRightButtons, .st-emotion-cache-6qob1r, .stAppDeployButton { display: none !important; }
+/* 🚫 Hide bottom-right Streamlit watermark/icons */
+.stAppBottomRightButtons, .stAppDeployButton { display: none !important; }
 
-/* Legacy/defensive selectors (don’t affect sidebar) */
-#MainMenu { visibility: hidden; }  /* text “hamburger” menu, not the sidebar */
+/* Defensive: don’t hide header/menus globally; just ensure legacy menu text is not shown */
+#MainMenu { visibility: hidden; }
 </style>
-"""
-st.markdown(HIDE_CHROME_CSS, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 with st.expander("About This Project", expanded=False):
     st.markdown("""
