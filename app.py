@@ -53,7 +53,28 @@ OPTIONAL_FEATURES = [
 # ───────────────────────────────────────────────────────────────────────────────
 # App config
 # ───────────────────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Marketing KPI & Propensity Intelligence", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Marketing KPI & Propensity Intelligence", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+
+# --- Hide ONLY the top-right toolbar + bottom-right watermark ---
+HIDE_CHROME_CSS = """
+<style>
+/* Keep the header & sidebar VISIBLE */
+header { visibility: visible !important; }
+div[data-testid="stSidebar"] { visibility: visible !important; display: block !important; }
+
+/* Top-right toolbar (Fork / GitHub / ⋮) */
+div[data-testid="stToolbar"] { visibility: hidden !important; display: none !important; }
+.stToolbar, .stToolbarActions, .stActionButton, .stDeployButton { display: none !important; }
+div[data-testid="stDecoration"], div[data-testid="stStatusWidget"] { display: none !important; }
+
+/* Bottom-right Streamlit icons/watermark */
+.stAppBottomRightButtons, .st-emotion-cache-6qob1r, .stAppDeployButton { display: none !important; }
+
+/* Legacy/defensive selectors (don’t affect sidebar) */
+#MainMenu { visibility: hidden; }  /* text “hamburger” menu, not the sidebar */
+</style>
+"""
+st.markdown(HIDE_CHROME_CSS, unsafe_allow_html=True)
 
 with st.expander("About This Project", expanded=False):
     st.markdown("""
