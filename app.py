@@ -55,25 +55,24 @@ OPTIONAL_FEATURES = [
 # ───────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Marketing KPI & Propensity Intelligence", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
-# --- Hide top-right & bottom-right chrome, KEEP sidebar toggle visible ---
+# --- Minimal + safe: hide only right-side actions and bottom-right watermark ---
 st.markdown("""
 <style>
-/* ✅ Keep header & sidebar (and its collapse/expand control) visible */
+/* Keep header, decoration strip, and sidebar fully visible (this preserves the chevron) */
 header { visibility: visible !important; }
-div[data-testid="stSidebar"] { visibility: visible !important; display: block !important; }
-/* DO NOT hide the decoration strip; it contains the small left chevron */
 div[data-testid="stDecoration"] { display: block !important; visibility: visible !important; }
+div[data-testid="stSidebar"] { visibility: visible !important; display: block !important; }
 
-/* 🚫 Hide only the top-right toolbar contents (Fork, GitHub, ⋮) but leave the toolbar container alive */
-div[data-testid="stToolbar"] > * { visibility: hidden !important; }
-div[data-testid="stToolbar"] svg,
-div[data-testid="stToolbar"] a,
-div[data-testid="stToolbar"] button { display: none !important; }
+/* Hide ONLY the top-right toolbar actions (Fork / GitHub / ⋮) */
+div[data-testid="stToolbarActions"] { display: none !important; }
 
-/* 🚫 Hide bottom-right Streamlit watermark/icons */
+/* Keep the toolbar container itself so the layout & chevron logic remain intact */
+div[data-testid="stToolbar"] { display: block !important; visibility: visible !important; }
+
+/* Hide bottom-right watermark/buttons */
 .stAppBottomRightButtons, .stAppDeployButton { display: none !important; }
 
-/* Defensive: don’t hide header/menus globally; just ensure legacy menu text is not shown */
+/* Optional: hide legacy text menu (does not affect sidebar) */
 #MainMenu { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
