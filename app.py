@@ -530,6 +530,12 @@ elif section == "🤖 Propensity":
         csv_bytes = df_scored.to_csv(index=False).encode("utf-8")
         st.download_button("Download scored CSV", data=csv_bytes, file_name="scored_output.csv", mime="text/csv")
 
+        st.markdown(
+            """
+        **Propensity Scoring:**  
+        Propensity scoring uses a trained machine learning model to estimate the likelihood that each customer will convert based on historical behavior and attributes. Customers are ranked by probability, and a decision threshold allows leadership to control campaign size and efficiency. Raising the threshold focuses spend on the highest-confidence prospects with lower CPA, while lowering the threshold increases volume at higher spend. This enables data-driven control of growth versus efficiency rather than one-size-fits-all targeting.
+            """
+        )
 # ───────────────────────────────────────────────────────────────────────────────
 # Lift & Gain
 # ───────────────────────────────────────────────────────────────────────────────
