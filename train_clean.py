@@ -38,11 +38,11 @@ import numpy as np
 import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.tree import DecisionTreeClassifier
@@ -55,6 +55,7 @@ except Exception:
     HAVE_XGB = False
 
 warnings.filterwarnings("ignore")
+np.seterr(all="ignore")  # silence benign numpy matmul over/underflow warnings
 
 RANDOM_STATE = 42
 
@@ -137,6 +138,17 @@ def main():
     if missing:
         print(f"Note: these expected features are absent and will be skipped: {missing}")
 
+    # ── Deduplicate on model features ─────────────────────────────────────────
+    # Identical feature-rows let a high-capacity model "look up" answers and, when
+    # they straddle the train/test split, inflate the holdout score. Drop exact
+    # duplicates (keeping the first) before doing anything else.
+    before = len(df)
+    df = df.loc[~df[features].duplicated(keep="first")].reset_index(drop=True)
+    y = build_target(df)
+    removed = before - len(df)
+    if removed:
+        print(f"Removed {removed:,} duplicate feature-rows -> {len(df):,} unique rows remain.")
+
     # Index-based split so we can also carve out a matching RAW holdout for the app.
     idx = np.arange(len(df))
     tr_idx, te_idx = train_test_split(idx, test_size=args.test_size, stratify=y, random_state=RANDOM_STATE)
@@ -179,41 +191,77 @@ def main():
         return Pipeline([("pre", pre), ("clf", clf)])
 
     candidates = {
+        # Regularized so leaves can't isolate individual rows: large min_samples_leaf,
+        # modest depth, L2. This captures genuine signal without memorizing quirks.
+        "Gradient Boosting (HistGB)": calibrated(
+            HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05,
+                                           max_leaf_nodes=15, min_samples_leaf=50,
+                                           l2_regularization=1.0, early_stopping=True,
+                                           validation_fraction=0.1, class_weight="balanced",
+                                           random_state=RANDOM_STATE)),
         "Random Forest": calibrated(
-            RandomForestClassifier(n_estimators=400, max_depth=8, class_weight="balanced",
-                                   random_state=RANDOM_STATE, n_jobs=-1)),
+            RandomForestClassifier(n_estimators=400, max_depth=6, min_samples_leaf=50,
+                                   class_weight="balanced", random_state=RANDOM_STATE, n_jobs=1)),
         "Logistic Regression": calibrated(
             LogisticRegression(max_iter=2000, class_weight="balanced"), scale=True),
     }
     if HAVE_XGB:
+        # NOTE: XGBoost only works with scikit-learn >= 1.6 when XGBoost >= 3.0.
+        # If your installed XGBoost is older, the fit below fails gracefully and is skipped.
         candidates["XGBoost"] = calibrated(
-            XGBClassifier(n_estimators=400, max_depth=5, learning_rate=0.05,
-                          subsample=0.8, colsample_bytree=0.8, scale_pos_weight=spw,
-                          eval_metric="logloss", random_state=RANDOM_STATE, n_jobs=-1))
+            XGBClassifier(n_estimators=300, max_depth=4, learning_rate=0.05,
+                          min_child_weight=50, subsample=0.8, colsample_bytree=0.8,
+                          reg_lambda=1.0, scale_pos_weight=spw, eval_metric="logloss",
+                          random_state=RANDOM_STATE, n_jobs=1))
     else:
-        print("xgboost not installed -> skipping XGBoost (pip install xgboost to include it).")
+        print("xgboost not installed -> skipping XGBoost (pip install 'xgboost>=3.0' to include it).")
 
-    # ── Train & evaluate on the untouched holdout ─────────────────────────────
-    print("\nTraining and evaluating on the held-out test set...")
+    # ── Train & evaluate: 5-fold CV (defensible headline) + untouched holdout ──
+    X_full, y_full = df[final_features], y
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
+    print("\nEvaluating with 5-fold cross-validation + a held-out test set...")
     results, fitted = [], {}
     for name, model in candidates.items():
-        model.fit(X_tr, y_tr)
-        proba = model.predict_proba(X_te)[:, 1]
+        try:
+            cv_auc = cross_val_score(model, X_full, y_full, cv=cv, scoring="roc_auc", n_jobs=1)
+            model.fit(X_tr, y_tr)
+            proba_te = model.predict_proba(X_te)[:, 1]
+            proba_tr = model.predict_proba(X_tr)[:, 1]
+        except Exception as e:  # noqa: BLE001
+            msg = str(e).splitlines()[-1][:120]
+            print(f"   [skipped] {name}: {msg}")
+            if "XGB" in name:
+                print("             (Upgrade with: pip install 'xgboost>=3.0' to include XGBoost.)")
+            continue
         results.append({
             "Model": name,
-            "AUC": round(roc_auc_score(y_te, proba), 4),
-            "PR_AUC": round(average_precision_score(y_te, proba), 4),
-            "Brier": round(brier_score_loss(y_te, proba), 4),
-            "Lift@10%": round(lift_at_k(y_te.values, proba), 2),
+            "CV_AUC": round(float(cv_auc.mean()), 4),
+            "CV_std": round(float(cv_auc.std()), 4),
+            "Holdout_AUC": round(roc_auc_score(y_te, proba_te), 4),
+            "Train_AUC": round(roc_auc_score(y_tr, proba_tr), 4),
+            "Brier": round(brier_score_loss(y_te, proba_te), 4),
+            "Lift@10%": round(lift_at_k(y_te.values, proba_te), 2),
         })
         fitted[name] = model
 
-    res = pd.DataFrame(results).sort_values(["AUC", "Brier"], ascending=[False, True]).reset_index(drop=True)
-    print("\n" + "=" * 64)
-    print("CLEAN MODEL COMPARISON (held-out test set)")
-    print("=" * 64)
+    if not results:
+        raise RuntimeError("All candidate models failed to train. Check the messages above.")
+
+    res = pd.DataFrame(results).sort_values(["CV_AUC", "Brier"], ascending=[False, True]).reset_index(drop=True)
+    print("\n" + "=" * 78)
+    print("MODEL COMPARISON  (CV_AUC = stable headline; Train vs Holdout = overfit check)")
+    print("=" * 78)
     print(res.to_string(index=False))
     res.to_csv("model_comparison.csv", index=False)
+
+    # Overfit flag: a large Train - Holdout gap means it is still memorizing.
+    gap = float(res.iloc[0]["Train_AUC"] - res.iloc[0]["Holdout_AUC"])
+    if res.iloc[0]["Holdout_AUC"] > 0.95:
+        print(f"\nNote: winner holdout AUC is {res.iloc[0]['Holdout_AUC']} — still very high even after")
+        print("      dedupe + regularization. That points to a near-deterministic target in this")
+        print("      dataset rather than real-world signal; treat the metrics as illustrative.")
+    elif gap > 0.07:
+        print(f"\nNote: Train AUC exceeds Holdout by {gap:.3f} — some overfitting remains.")
 
     best_name = res.iloc[0]["Model"]
     best_model = fitted[best_name]
@@ -223,7 +271,7 @@ def main():
     joblib.dump(best_model, "best_model.pkl")
     json.dump(
         {"model": best_name, "features": final_features, "dropped_as_leak": drop,
-         "scale_pos_weight": spw, "holdout_metrics": res.iloc[0].to_dict()},
+         "scale_pos_weight": spw, "metrics": res.iloc[0].to_dict()},
         open("model_features.json", "w"), indent=2,
     )
 

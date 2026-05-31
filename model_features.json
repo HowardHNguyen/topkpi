@@ -1,0 +1,33 @@
+{
+  "model": "Gradient Boosting (HistGB)",
+  "features": [
+    "State",
+    "Coverage",
+    "Education",
+    "EmploymentStatus",
+    "Income",
+    "Location Code",
+    "Marital Status",
+    "Monthly Premium Auto",
+    "Months Since Last Claim",
+    "Months Since Policy Inception",
+    "Number of Open Complaints",
+    "Number of Policies",
+    "Renew Offer Type",
+    "Sales Channel",
+    "Total Claim Amount",
+    "Vehicle Class",
+    "Vehicle Size"
+  ],
+  "dropped_as_leak": [],
+  "scale_pos_weight": 10.646,
+  "metrics": {
+    "Model": "Gradient Boosting (HistGB)",
+    "CV_AUC": 0.9652,
+    "CV_std": 0.0091,
+    "Holdout_AUC": 0.9675,
+    "Train_AUC": 0.9885,
+    "Brier": 0.0361,
+    "Lift@10%": 8.2
+  }
+}

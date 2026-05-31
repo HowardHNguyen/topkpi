@@ -98,28 +98,47 @@ div[data-testid="stToolbar"] { display: block !important; visibility: visible !i
 with st.expander("About This Project", expanded=False):
     st.markdown(
         """
-        ### 💡 About This Project
-        This app and its accompanying article — **Advanced Marketing KPI Performance with Data Science** — bridge the gap
-        between traditional marketing metrics and modern AI intelligence.
+        ### What this app does
+        It answers a simple question every marketing team faces: **which customers should we spend money on, and how much
+        will we make back?**
 
-        In most marketing teams, KPIs such as **Conversion Rate (CR)**, **Customer Lifetime Value (CLV)**,
-        **Cost per Acquisition (CPA)**, and **Return on Investment (ROI)** are analyzed separately. This project integrates
-        them within a **predictive data-science framework** that reveals how they interact, enabling data-driven
-        decision-making instead of static reporting.
+        Upload your customer list and the app does three things:
 
-        ### 🎯 Purpose
-        Empower marketing leaders, analysts, and growth teams to **move from descriptive to prescriptive insights** —
-        forecasting conversions, simulating ROI, and recommending optimal channel strategies.
+        1. **Scores every customer** with a 0–100% likelihood of buying (its *propensity*).
+        2. **Tells you where to draw the line** — how many people to contact so profit is highest, not just response.
+        3. **Tracks the four numbers leaders care about** — Conversion Rate, Customer Lifetime Value, Cost per
+        Acquisition, and Return on Investment — and shows how they change by channel and offer.
 
-        ### ⚙️ How It Was Built
-        - **Dataset:** Customer and policy data (demographics, claims, sales channels, offers).
-        - **Modeling Stack:** `scikit-learn`, `LightGBM`, `XGBoost`, and a calibrated ensemble pipeline for **propensity modeling**.
-        - **Metrics:** CR, CLV, CPA, and ROI dynamically computed for every uploaded dataset.
-        - **Validation:** Stratified CV, grouped CV by customer, and permutation AUC to detect overfitting.
-        - **Visualization:** Interactive **Plotly** dashboards with “How to Read This Section” notes.
-        - **Deployment:** Streamlit + GitHub + Python 3.12 (`scikit-learn 1.6.1`, `lightgbm 4.5.0`, `joblib 1.4.2`).
+        ### Why it helps
+        A normal dashboard tells you *what already happened*. This one estimates *what is likely to happen next* and
+        what to do about it — so you can focus budget on the people most likely to convert and skip the spend that
+        won't pay off.
+
+        ### The four KPIs in plain terms
+        - **Conversion Rate (CR)** — out of everyone you contacted, the share who actually bought.
+        - **Customer Lifetime Value (CLV)** — the total revenue you expect from a customer over time.
+        - **Cost per Acquisition (CPA)** — what it costs, on average, to win one new customer.
+        - **Return on Investment (ROI)** — for every dollar spent, how much came back.
+
+        ### Good to know
+        - You can change the **cost assumptions** in the left sidebar and every number updates instantly.
+        - If your file is missing lifetime-value data, the app fills in a **conservative estimate** so ROI still works.
+        - **About the predictions:** the KPI analytics (conversion, CLV, CPA, ROI by channel and offer) reflect the
+        data directly and are reliable. The **model metrics** (propensity scores, AUC, lift, calibration) run on a
+        public benchmark dataset whose response is unusually easy to predict, so they look stronger than a real
+        marketing campaign would. Read the model sections as an illustration of the method, not a forecast of live
+        performance.
+
+        *Built with Python, scikit-learn, LightGBM and XGBoost; charts by Plotly; deployed on Streamlit.*
         """
     )
+
+# Shown at the top of the predictive sections (Propensity, Lift & Gain, Calibration).
+BENCHMARK_NOTE = (
+    "**About these model metrics:** this dashboard runs on a public benchmark dataset whose response is unusually "
+    "separable, so the scores here (AUC, lift, calibration) are higher than a live campaign would produce — read them "
+    "as an illustration of the method, not a real-world forecast. The KPI tabs reflect the data directly and are unaffected."
+)
 
 DEFAULT_COST_MAP = {"Web": 40, "Call Center": 70, "Branch": 90, "Agent": 120}
 TARGET_COL = "conversion"
@@ -526,6 +545,7 @@ elif section == "🤖 Propensity":
             - **Profit curve** – the app recommends the threshold that **maximizes ROI**.
             """
         )
+    st.info(BENCHMARK_NOTE)
 
     if df is None:
         st.warning("Upload data to score.")
@@ -537,6 +557,10 @@ elif section == "🤖 Propensity":
         st.write("**Top prospects** (highest probability first):")
         top_view = df_scored.sort_values("propensity", ascending=False)
         st.dataframe(top_view.head(25), use_container_width=True)
+        st.caption(
+            "The **propensity** column is each customer's estimated chance of buying, from 0 (won't) to 1 (almost "
+            "certainly will). The table is sorted best-first, so these are the people to contact before anyone else."
+        )
 
         colA, colB = st.columns([2, 1])
         with colA:
@@ -545,14 +569,28 @@ elif section == "🤖 Propensity":
             else:
                 figp = px.histogram(df_scored, x="propensity", nbins=30, title="Propensity Distribution")
                 st.plotly_chart(figp, use_container_width=True)
+                st.caption(
+                    "**How to read this:** each bar counts how many customers fall in that score range. Most people "
+                    "usually sit on the left (low chance of buying); a cluster on the right is your pool of likely "
+                    "buyers. The bigger that right-side group, the more easy wins you have."
+                )
         with colB:
             thr = st.slider("Decision threshold", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
             est_converted = int((df_scored["propensity"] >= thr).sum())
             st.metric("Targeted @ threshold", est_converted)
-            st.caption("**Threshold** — sets how deep you go. Lower = more volume, lower precision.")
+            st.caption(
+                "The **threshold** is your cutoff: contact everyone scoring at or above it. **Targeted** is how many "
+                "people that is. Lower the cutoff to reach more people (but waste more spend on unlikely buyers); "
+                "raise it to focus only on the surest bets."
+            )
 
         # Profit / ROI vs threshold optimizer ------------------------------------
         st.markdown("#### Profit & ROI by threshold")
+        st.markdown(
+            "This is the **\"where do we draw the line?\"** answer. The app tries every possible cutoff, works out the "
+            "profit you'd make at each one (value won minus money spent contacting people), and points to the cutoff "
+            "that makes the **most money** — not just the most responses."
+        )
         med_cost = float(np.median(list(user_cost_map.values())))
         if CLV_COL in df_scored.columns:
             clv_series = df_scored[CLV_COL].clip(lower=0).fillna(proxy_clv(df_scored))
@@ -587,11 +625,20 @@ elif section == "🤖 Propensity":
             b2.metric("Profit at recommendation", fmt_money(best["profit"]))
             b3.metric("ROI at recommendation", fmt_pct(best["roi"]))
             st.caption(
-                ("Profit uses **realized** converter value (ground truth present)."
-                 if has_target else
-                 "No ground truth — profit uses **expected** (probability-weighted) value.")
-                + f" Spend assumes median CPA ${med_cost:,.0f}/target."
+                f"**In plain terms:** contact everyone scoring **{best['threshold']:.2f} or higher** "
+                f"(**{int(best['targeted']):,} customers**). At that cutoff you'd make about "
+                f"**{fmt_money(best['profit'])}** in profit, meaning roughly **{fmt_pct(best['roi'])}** back on what "
+                f"you spend. "
+                + ("Profit here counts value from customers who actually converted (your file includes real outcomes)."
+                   if has_target else
+                   "Your file has no real outcomes yet, so profit is an **estimate** weighted by each person's chance of buying.")
+                + f" Cost assumes **${med_cost:,.0f}** to contact each person."
             )
+            if has_target and pd.notna(best["roi"]) and best["roi"] > 20:
+                st.warning(
+                    "This ROI is very high because the benchmark dataset's response is unusually predictable — a real "
+                    "campaign would land far lower. Use this to see how the threshold-to-profit logic works, not as a budget figure."
+                )
 
         if PLOTLY_OK and len(prof_df):
             figpf = go.Figure()
@@ -601,6 +648,11 @@ elif section == "🤖 Propensity":
                                 annotation_text="recommended", annotation_position="top")
             figpf.update_layout(title="Profit vs Threshold", xaxis_title="Threshold", yaxis_title="Profit ($)")
             st.plotly_chart(figpf, use_container_width=True)
+            st.caption(
+                "**How to read this:** the line is your profit at every possible cutoff. The dashed line marks the "
+                "sweet spot. To the left you contact too many unlikely buyers and waste spend; to the right you skip "
+                "people who would have paid off. The peak is where profit is highest."
+            )
 
         # Estimated KPIs when no ground truth ------------------------------------
         if not has_target:
@@ -653,6 +705,7 @@ elif section == "📈 Lift & Gain":
             - A gain curve that rises steeply then flattens means most value sits in the top deciles.
             """
         )
+    st.info(BENCHMARK_NOTE)
 
     if df is None:
         st.warning("Upload data to compute lift.")
@@ -665,6 +718,11 @@ elif section == "📈 Lift & Gain":
     else:
         lift = lift_table(df_scored[TARGET_COL], df_scored["propensity"], bins=10)
         st.dataframe(lift, use_container_width=True)
+        st.caption(
+            "Customers are split into ranked groups (best scores at the top). For each group the table shows how many "
+            "people it holds, how many actually bought, and how much better that is than contacting people at random "
+            "(**lift**). Higher numbers near the top = the model is good at finding buyers."
+        )
 
         if not PLOTLY_OK:
             st.warning("Plotly isn’t installed in this build. Add `plotly==5.24.1` to requirements.txt and redeploy.")
@@ -672,10 +730,19 @@ elif section == "📈 Lift & Gain":
             fig_lift = px.line(lift, y="lift", title="Lift by Decile", markers=True)
             fig_lift.update_layout(xaxis_title="Decile (high→low propensity)", yaxis_title="Lift")
             st.plotly_chart(fig_lift, use_container_width=True)
+            st.caption(
+                "**Lift** = how many times more buyers you find in each group versus random contacting. A lift of 6 in "
+                "the top group means it's 6× richer in buyers than a random list. You want the line high on the left "
+                "and dropping as you move right — that's the model putting the best people first."
+            )
 
             fig_cum = px.line(lift, y="cum_lift", title="Cumulative Lift", markers=True)
             fig_cum.update_layout(xaxis_title="Decile (cumulative)", yaxis_title="Cumulative Lift")
             st.plotly_chart(fig_cum, use_container_width=True)
+            st.caption(
+                "**Cumulative lift** answers: if I contact the top X% so far, how much better am I doing than random? "
+                "It starts high and settles toward 1 — contacting everyone is, by definition, no better than random."
+            )
 
             # Real cumulative-gain curve with the random baseline
             fig_gain = go.Figure()
@@ -694,9 +761,11 @@ elif section == "📈 Lift & Gain":
                 yaxis_title="% of converters captured",
             )
             st.plotly_chart(fig_gain, use_container_width=True)
-            st.markdown(
-                "**Interpretation:** the further the model curve bows above the diagonal, the more converters you "
-                "capture for a given amount of outreach. A steep early rise means you can target shallow and still hit goals."
+            st.caption(
+                "**How to read this:** the bottom axis is how much of your list you contact (best-scored first); the "
+                "side axis is the share of all your buyers you've reached. Example: if the line hits 0.8 at 0.3, then "
+                "contacting your top 30% reaches 80% of everyone who would buy. The dashed line is random contacting — "
+                "the further the model rises above it, the more you save."
             )
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -716,6 +785,7 @@ elif section == "🧪 Calibration":
             re-calibrate (isotonic / Platt) or retrain with recent data.
             """
         )
+    st.info(BENCHMARK_NOTE)
 
     if df is None:
         st.warning("Upload data to check calibration.")
@@ -731,19 +801,37 @@ elif section == "🧪 Calibration":
 
         # Model-quality tiles
         if SKMETRICS_OK and y_true.nunique() > 1:
+            st.markdown("##### How good is the model? (three scorecards)")
             m1, m2, m3 = st.columns(3)
+            auc = ap = brier = None
             try:
-                m1.metric("ROC AUC", f"{roc_auc_score(y_true, y_pred):.3f}")
+                auc = roc_auc_score(y_true, y_pred)
+                m1.metric("ROC AUC", f"{auc:.3f}")
             except Exception:
                 m1.metric("ROC AUC", "—")
             try:
-                m2.metric("Avg Precision", f"{average_precision_score(y_true, y_pred):.3f}")
+                ap = average_precision_score(y_true, y_pred)
+                m2.metric("Avg Precision", f"{ap:.3f}")
             except Exception:
                 m2.metric("Avg Precision", "—")
             try:
-                m3.metric("Brier (lower=better)", f"{brier_score_loss(y_true, y_pred):.4f}")
+                brier = brier_score_loss(y_true, y_pred)
+                m3.metric("Brier (lower=better)", f"{brier:.4f}")
             except Exception:
                 m3.metric("Brier (lower=better)", "—")
+            st.caption(
+                "**In plain terms:** "
+                "**ROC AUC** — how well the model sorts buyers above non-buyers; 0.5 is a coin flip, 1.0 is perfect "
+                "(0.7–0.85 is healthy in marketing). "
+                "**Avg Precision** — how clean your top of the list is; higher means fewer wasted contacts up top. "
+                "**Brier** — how close the predicted percentages are to reality; lower is better, and near 0 is ideal."
+            )
+            if (auc is not None and auc > 0.90) or (brier is not None and brier < 0.02):
+                st.warning(
+                    "An AUC this high almost never occurs with live customers. Here it's because this benchmark "
+                    "dataset's response is largely determined by the customer attributes — the model is sound, the "
+                    "data is just unusually separable. A real campaign would typically score around 0.70–0.80."
+                )
 
         bins = st.slider("Calibration bins", min_value=5, max_value=20, value=10)
         df_tmp = df_scored.copy()
@@ -768,3 +856,9 @@ elif section == "🧪 Calibration":
                 yaxis_title="Observed conversion rate",
             )
             st.plotly_chart(figc, use_container_width=True)
+            st.caption(
+                "**How to read this:** when the model says \"70% likely,\" did about 70% actually buy? This chart "
+                "checks that. The closer the solid line sits to the dashed diagonal, the more you can trust the "
+                "percentages — which is what makes the profit and ROI estimates believable. A line that sits above "
+                "the diagonal means the model is too cautious; below means it's too optimistic."
+            )
