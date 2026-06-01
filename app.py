@@ -624,7 +624,7 @@ elif section == "🤖 Propensity":
             b1.metric("Recommended threshold", f"{best['threshold']:.2f}")
             b2.metric("Profit at recommendation", fmt_money(best["profit"]))
             b3.metric("ROI at recommendation", fmt_pct(best["roi"]))
-            st.caption(
+            cap = (
                 f"**In plain terms:** contact everyone scoring **{best['threshold']:.2f} or higher** "
                 f"(**{int(best['targeted']):,} customers**). At that cutoff you'd make about "
                 f"**{fmt_money(best['profit'])}** in profit, meaning roughly **{fmt_pct(best['roi'])}** back on what "
@@ -634,6 +634,7 @@ elif section == "🤖 Propensity":
                    "Your file has no real outcomes yet, so profit is an **estimate** weighted by each person's chance of buying.")
                 + f" Cost assumes **${med_cost:,.0f}** to contact each person."
             )
+            st.caption(cap.replace("$", "\\$"))  # escape $ so Streamlit doesn't render it as LaTeX
             if has_target and pd.notna(best["roi"]) and best["roi"] > 20:
                 st.warning(
                     "This ROI is very high because the benchmark dataset's response is unusually predictable — a real "
